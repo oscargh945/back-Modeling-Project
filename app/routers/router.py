@@ -1,8 +1,10 @@
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services.octave_runner import run_interpolation_lineal, run_no_lineal_interpolation, run_script_with_args, \
-    run_portafolio, run_tir
+    run_portafolio, run_tir, calcular_opcion, solve_edo
 
 router = APIRouter()
 
@@ -40,6 +42,24 @@ class PortafolioInput(BaseModel):
     e2: float
     ep: float
 
+
+class EdoInput(BaseModel):
+    W0: float
+    f: str
+    t0: float
+    T: float
+    N: int
+    metodo: Literal["euler", "rk2", "rk4"]
+
+
+class OptionInput(BaseModel):
+    K: float
+    r: float
+    T: float
+    S0: float
+    sigma: float
+
+
 @router.post("/interpolate-lineal/")
 def interpolate_lineal(data: InterpolationInput):
     result = run_interpolation_lineal(data.x, data.X, data.Y)
@@ -55,21 +75,6 @@ def interpolate_nonlinear(data: InterpolationInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/punto-fijo/")
-def metodo_punto_fijo(data: PuntoFijoInput):
-    args = [str(data.x1), str(data.KIC), str(data.w), str(data.Sigma), str(data.TOL)]
-    return run_script_with_args("MetPuntFijo.m", args)
-
-@router.post("/newton-raphson/")
-def metodo_newton_raphson(data: NewtonInput):
-    args = [str(data.x1), str(data.TOL)]
-    return run_script_with_args("N_R.m", args)
-
-@router.post("/secante/")
-def metodo_secante(data: SecanteInput):
-    args = [str(data.x0), str(data.x1), str(data.TOL)]
-    return run_script_with_args("Secante.m", args)
-
 @router.post("/tir/")
 def calcular_tir(data: TIRInput):
     try:
@@ -81,5 +86,19 @@ def calcular_tir(data: TIRInput):
 def calcular_pesos(data: PortafolioInput):
     try:
         return run_portafolio(data.e1, data.e2, data.ep)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/resolver-edo/")
+def resolver_edo(data: EdoInput):
+    try:
+        return solve_edo(**data.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/opcion/")
+def calcular_valor_opcion(data: OptionInput):
+    try:
+        return calcular_opcion(data.dict())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

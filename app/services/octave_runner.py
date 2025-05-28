@@ -1,5 +1,8 @@
 import subprocess
 import re
+from typing import List, Literal
+import numpy as np
+
 
 def run_script_with_args(script_name: str, args: list[str]) -> dict:
     try:
@@ -103,3 +106,78 @@ def run_portafolio(e1: float, e2: float, ep: float) -> dict:
         "w1": float(w1.group(1)),
         "w2": float(w2.group(1))
     }
+
+
+def solve_edo(
+        W0: float,
+        f: str,
+        t0: float,
+        T: float,
+        N: int,
+        metodo: Literal["euler", "rk2", "rk4"]
+) -> dict:
+    """
+    Resuelve dW/dt = f(t, W) con métodos numéricos en Python.
+    """
+
+    # Preparamos la función a partir de string (cuidado con seguridad si viene de usuario)
+    # Aquí, como ejemplo, usamos eval con entorno controlado
+    # Renombrar el parámetro para uso interno
+    f_expr = f.strip()
+
+    def f_func(t, W):
+        return eval(f_expr, {"t": t, "W": W, "np": np})
+
+    h = (T - t0) / N
+    t = np.linspace(t0, T, N + 1).tolist()
+    W = [W0]
+
+    for i in range(N):
+        Wi = W[i]
+        ti = t[i]
+        if metodo == "euler":
+            Wip1 = Wi + h * f_func(ti, Wi)
+        elif metodo == "rk2":
+            k1 = f_func(ti, Wi)
+            k2 = f_func(ti + h, Wi + h * k1)
+            Wip1 = Wi + h / 2 * (k1 + k2)
+        elif metodo == "rk4":
+            k1 = f_func(ti, Wi)
+            k2 = f_func(ti + h / 2, Wi + h / 2 * k1)
+            k3 = f_func(ti + h / 2, Wi + h / 2 * k2)
+            k4 = f_func(ti + h, Wi + h * k3)
+            Wip1 = Wi + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        else:
+            raise ValueError(f"Método no soportado: {metodo}")
+
+        W.append(Wip1)
+    return {"t": t, "W": W}
+
+
+def calcular_opcion(data: dict) -> dict:
+    try:
+        args = [
+            str(data["K"]),
+            str(data["r"]),
+            str(data["T"]),
+            str(data["S0"]),
+            str(data["sigma"])
+        ]
+
+        result = subprocess.run(
+            ["octave", "--quiet", "valor_opcion.m"] + args,
+            capture_output=True,
+            text=True,
+            cwd="octave"
+        )
+
+        if result.returncode != 0:
+            print("STDERR:", result.stderr)
+            raise RuntimeError(result.stderr)
+
+        valor = float(result.stdout.strip().splitlines()[-1])
+        return {"valor_opcion": valor}
+
+    except Exception as e:
+        print("EXCEPTION:", str(e))
+        raise RuntimeError(f"Octave error: {str(e)}")
